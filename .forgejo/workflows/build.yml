@@ -14,7 +14,7 @@ on:
   workflow_dispatch: {}
 
 env:
-  HARBOR: harbor.dev.openschema.io
+  HARBOR: registry.dev.openschema.io
   PROJECT: agent-platform
 
 jobs:
