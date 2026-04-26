@@ -1,0 +1,110 @@
+# syntax=docker/dockerfile:1.7
+# ---------------------------------------------------------------------------
+# agent-workspace-desktop — workspace image + XFCE desktop + KasmVNC.
+#
+# Layer-on top of `agent-workspace:<tag>` so the basic image stays small
+# (~6.4GB) and projects that don't need a GUI never download these extras.
+#
+# What's added:
+#   * XFCE4 desktop environment (xfce4 + goodies + dbus-x11 + xfonts-base)
+#   * KasmVNC server (browser-native VNC, ships with built-in HTML5 client
+#     on :6901 — no separate noVNC layer needed)
+#   * GUI automation tools the agent can drive: xdotool, scrot, wmctrl,
+#     x11-utils. The agent gets DISPLAY=:1 injected so headed Playwright
+#     and any xdotool/scrot calls land on the same X server the user sees
+#     through KasmVNC.
+#
+# Base override is via build-arg WORKSPACE_BASE so cluster-local re-tags
+# (agent-workspace:dev-1777142271 etc.) compose without editing this file.
+# ---------------------------------------------------------------------------
+
+ARG WORKSPACE_BASE=agent-workspace:dev
+FROM ${WORKSPACE_BASE}
+
+ARG DEBIAN_FRONTEND=noninteractive
+ARG KASMVNC_VERSION=1.3.4
+
+USER root
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+        xfce4 xfce4-goodies dbus-x11 xfonts-base \
+        xdotool scrot wmctrl x11-utils \
+        # KasmVNC's .deb pulls these as runtime deps, but list explicitly so
+        # an apt resolver mismatch surfaces here rather than at first boot.
+        libxfont2 libxkbfile1 libegl1 \
+        # KasmVNC defaults to expecting /etc/ssl/private/ssl-cert-snakeoil.key —
+        # ssl-cert provides `make-ssl-cert`; we invoke it explicitly because
+        # the package's postinst skips cert generation in some Docker builds.
+        # The cert is dev-only; the gateway terminates the public-facing TLS
+        # in front of it anyway.
+        ssl-cert \
+        # GUI browsers — show up in XFCE's app menu automatically (.desktop
+        # files installed by the packages). Both chromium and firefox-esr so
+        # the user can pick; agents can drive them via Playwright (headed)
+        # or xdotool. Image grows ~600MB.
+        chromium firefox-esr \
+ && apt-get clean \
+ && rm -rf /var/lib/apt/lists/* \
+ && make-ssl-cert generate-default-snakeoil --force-overwrite \
+ # /etc/ssl/private/ssl-cert-snakeoil.key is mode 640 root:ssl-cert.
+ # KasmVNC runs as coder, so coder needs ssl-cert group membership to
+ # read the key — otherwise kasmvncserver exits at boot.
+ && usermod -aG ssl-cert coder
+
+# KasmVNC: the official Debian .deb. Upstream publishes a `bookworm` build —
+# trixie shares glibc/libstdc++ ABI with bookworm so it installs cleanly.
+# When KasmVNC ships a trixie .deb, swap the URL.
+RUN ARCH="$(dpkg --print-architecture)" \
+ && curl -fsSL \
+        "https://github.com/kasmtech/KasmVNC/releases/download/v${KASMVNC_VERSION}/kasmvncserver_bookworm_${KASMVNC_VERSION}_${ARCH}.deb" \
+        -o /tmp/kasmvncserver.deb \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends /tmp/kasmvncserver.deb \
+ && rm /tmp/kasmvncserver.deb \
+ && apt-get clean \
+ && rm -rf /var/lib/apt/lists/*
+
+# KasmVNC config: open access (auth handled by oauth2-proxy at the gateway),
+# WebSocket on 6901, X display :1. Lives in coder's home so the user can
+# tweak per-pod (changes survive across pod restarts via the hermes-home PVC
+# if we ever map it onto ~/.vnc — for now it's ephemeral).
+RUN install -d -m 0700 -o coder -g coder /home/coder/.vnc \
+ && printf '%s\n' \
+        '#!/bin/sh' \
+        'xrdb $HOME/.Xresources 2>/dev/null || true' \
+        'export XDG_SESSION_DESKTOP=xfce' \
+        'export XDG_CURRENT_DESKTOP=XFCE' \
+        'exec dbus-launch --exit-with-session xfce4-session' \
+      > /home/coder/.vnc/xstartup \
+ && chmod 0755 /home/coder/.vnc/xstartup \
+ # KasmVNC's select-de.sh prompts "[1] XFCE / [2] Manually edit xstartup"
+ # on first boot and only skips the prompt when `~/.vnc/.de-was-selected`
+ # exists. Touching it pre-build short-circuits the prompt so supervisord
+ # doesn't hang at startup. (`-s manual` flag would also work, but the
+ # marker file is the path the upstream wrapper actually checks first.)
+ && touch /home/coder/.vnc/.de-was-selected \
+ # KasmVNC defaults to HTTPS-only on the websocket port. Traefik (and any
+ # Gateway API backendRef) sends plain HTTP to backends — without
+ # `require_ssl: false`, the gateway-to-pod hop fails with Bad Gateway. The
+ # gateway terminates user-facing TLS; the pod-side leg stays plain HTTP.
+ && printf '%s\n' \
+        'network:' \
+        '  ssl:' \
+        '    require_ssl: false' \
+      > /home/coder/.vnc/kasmvnc.yaml \
+ && touch /home/coder/.Xauthority \
+ && chown -R coder:coder /home/coder/.vnc /home/coder/.Xauthority \
+ # KasmVNC also prompts to create a write-access user on first boot —
+ # pre-seed ~/.kasmpasswd. The actual auth is offloaded to oauth2-proxy at
+ # the gateway (KasmVNC runs with SecurityTypes=None in supervisord), so
+ # this password is never checked.
+ && su -s /bin/sh coder -c 'printf "kasmvnc\nkasmvnc\n" | kasmvncpasswd -u kasm -w /home/coder/.kasmpasswd'
+
+# Replace supervisord.conf with the desktop-aware variant (adds kasmvnc +
+# xfce4 programs, keeps the existing code-server / agent / webui / ttyd).
+COPY supervisord-desktop.conf /etc/supervisord.conf
+
+EXPOSE 6901
+
+# ENTRYPOINT/WORKDIR/USER inherited from base.
