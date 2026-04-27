@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 # ---------------------------------------------------------------------------
-# agent-workspace — single-container "Linux pod" for a Hermes project.
+# agent-sandbox — single-container "Linux pod" for a Hermes project.
 #
 # Combines into one image:
 #   * code-server (browser VSCode + xterm.js terminal) — operator interface
@@ -65,7 +65,7 @@ RUN ARCH="$(dpkg --print-architecture)" \
  && ttyd --version
 
 # Terraform + kubectl. Workspace pods bind to cluster-admin (opt-in via the
-# spawner's `workspace_cluster_admin_enabled` flag) so the agent or user
+# spawner's `sandbox_cluster_admin_enabled` flag) so the agent or user
 # can run `terraform apply` directly against this same cluster — useful for
 # solo dev where the workspace IS the operator console. State backend
 # choice (kubernetes-secret / postgres / S3 / local) is left to the user's
@@ -149,9 +149,9 @@ COPY --from=webui-src /apptoo /opt/hermes-webui
 RUN chown -R coder:coder /opt/hermes-webui
 
 COPY supervisord.conf /etc/supervisord.conf
-COPY start.sh /usr/local/bin/agent-workspace-start
+COPY start.sh /usr/local/bin/agent-sandbox-start
 COPY agent-bootstrap.sh /usr/local/bin/hermes-agent-bootstrap
-RUN chmod +x /usr/local/bin/agent-workspace-start /usr/local/bin/hermes-agent-bootstrap
+RUN chmod +x /usr/local/bin/agent-sandbox-start /usr/local/bin/hermes-agent-bootstrap
 
 ENV DOCKER_HOST=tcp://localhost:2375
 ENV HERMES_HOME=/home/coder/.hermes
@@ -160,4 +160,4 @@ ENV WORKSPACE_DIR=/home/coder/workspace
 EXPOSE 7681 8080 8642 8787
 
 WORKDIR /home/coder
-ENTRYPOINT ["/usr/bin/tini", "-g", "--", "/usr/local/bin/agent-workspace-start"]
+ENTRYPOINT ["/usr/bin/tini", "-g", "--", "/usr/local/bin/agent-sandbox-start"]

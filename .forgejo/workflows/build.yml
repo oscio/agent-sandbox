@@ -1,8 +1,8 @@
 name: build-and-push
 
 # Forgejo Actions workflow — builds BOTH workspace variants on push:
-#   - agent-workspace          : basic (code-server + hermes-agent + webui + ttyd)
-#   - agent-workspace-desktop  : basic + XFCE + KasmVNC + xdotool/scrot
+#   - agent-sandbox          : basic (code-server + hermes-agent + webui + ttyd)
+#   - agent-sandbox-desktop  : basic + XFCE + KasmVNC + xdotool/scrot
 #
 # Desktop image FROM's the basic image, so the basic build must finish
 # first (Forgejo Actions `needs:` enforces ordering). Both push to the
@@ -14,14 +14,14 @@ on:
   workflow_dispatch: {}
 
 env:
-  HARBOR: registry.dev.openschema.io
+  HARBOR: cr.dev.openschema.io
   PROJECT: agent-platform
 
 jobs:
   basic:
     runs-on: docker
     outputs:
-      image_ref: ${{ env.HARBOR }}/${{ env.PROJECT }}/agent-workspace:${{ github.sha }}
+      image_ref: ${{ env.HARBOR }}/${{ env.PROJECT }}/agent-sandbox:${{ github.sha }}
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -35,8 +35,8 @@ jobs:
           file: Dockerfile
           push: true
           tags: |
-            ${{ env.HARBOR }}/${{ env.PROJECT }}/agent-workspace:${{ github.sha }}
-            ${{ env.HARBOR }}/${{ env.PROJECT }}/agent-workspace:latest
+            ${{ env.HARBOR }}/${{ env.PROJECT }}/agent-sandbox:${{ github.sha }}
+            ${{ env.HARBOR }}/${{ env.PROJECT }}/agent-sandbox:latest
           cache-from: type=local,src=/tmp/buildkit-cache-basic
           cache-to: type=local,dest=/tmp/buildkit-cache-basic,mode=max
 
@@ -59,9 +59,9 @@ jobs:
           # BuildKit's `--build-arg` passes the SHA-tagged ref so we
           # never accidentally compose against a stale `latest`.
           build-args: |
-            WORKSPACE_BASE=${{ needs.basic.outputs.image_ref }}
+            SANDBOX_BASE=${{ needs.basic.outputs.image_ref }}
           tags: |
-            ${{ env.HARBOR }}/${{ env.PROJECT }}/agent-workspace-desktop:${{ github.sha }}
-            ${{ env.HARBOR }}/${{ env.PROJECT }}/agent-workspace-desktop:latest
+            ${{ env.HARBOR }}/${{ env.PROJECT }}/agent-sandbox-desktop:${{ github.sha }}
+            ${{ env.HARBOR }}/${{ env.PROJECT }}/agent-sandbox-desktop:latest
           cache-from: type=local,src=/tmp/buildkit-cache-desktop
           cache-to: type=local,dest=/tmp/buildkit-cache-desktop,mode=max

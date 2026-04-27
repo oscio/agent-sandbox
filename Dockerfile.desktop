@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile:1.7
 # ---------------------------------------------------------------------------
-# agent-workspace-desktop — workspace image + XFCE desktop + KasmVNC.
+# agent-sandbox-desktop — workspace image + XFCE desktop + KasmVNC.
 #
-# Layer-on top of `agent-workspace:<tag>` so the basic image stays small
+# Layer-on top of `agent-sandbox:<tag>` so the basic image stays small
 # (~6.4GB) and projects that don't need a GUI never download these extras.
 #
 # What's added:
@@ -14,12 +14,12 @@
 #     and any xdotool/scrot calls land on the same X server the user sees
 #     through KasmVNC.
 #
-# Base override is via build-arg WORKSPACE_BASE so cluster-local re-tags
-# (agent-workspace:dev-1777142271 etc.) compose without editing this file.
+# Base override is via build-arg SANDBOX_BASE so cluster-local re-tags
+# (agent-sandbox:dev-1777142271 etc.) compose without editing this file.
 # ---------------------------------------------------------------------------
 
-ARG WORKSPACE_BASE=agent-workspace:dev
-FROM ${WORKSPACE_BASE}
+ARG SANDBOX_BASE=agent-sandbox:dev
+FROM ${SANDBOX_BASE}
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG KASMVNC_VERSION=1.3.4

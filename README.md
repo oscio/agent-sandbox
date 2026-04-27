@@ -1,4 +1,4 @@
-# agent-workspace
+# agent-sandbox
 
 Single-container "Linux pod" image for a Hermes project. Bundles
 [code-server](https://github.com/coder/code-server) + hermes-agent +
@@ -8,7 +8,7 @@ hermes-webui into one container, supervised by `supervisord`.
 
 ```
                       ┌─────────────────────────────────────────┐
-                      │         agent-workspace pod            │
+                      │         agent-sandbox pod            │
                       │                                         │
    browser ──────────▶│  ┌─ workspace container ─────────────┐  │
    (code-server,      │  │ supervisord (PID 1, via tini)     │  │
@@ -44,15 +44,15 @@ integrated terminal (xterm.js); hermes-agent works on files in the same
 ## Build
 
 ```bash
-cd services/agent-workspace
-docker build -t agent-workspace:dev .
+cd services/agent-sandbox
+docker build -t agent-sandbox:dev .
 
 # Pin upstream image versions:
 docker build \
   --build-arg HERMES_AGENT_IMAGE=nousresearch/hermes-agent:0.11.0 \
   --build-arg HERMES_WEBUI_IMAGE=ghcr.io/nesquena/hermes-webui:0.50.205 \
   --build-arg CODE_SERVER_VERSION=4.96.4 \
-  -t agent-workspace:dev .
+  -t agent-sandbox:dev .
 ```
 
 ## Persistence
@@ -91,7 +91,7 @@ default) breaks the venv's compiled `.so` loads. trixie + the same
 In `infra/clusters/dev/terraform.tfvars` (or the spawner's env):
 
 ```hcl
-agent_spawner_workspace_image = "agent-workspace:dev"
+agent_spawner_sandbox_image = "agent-sandbox:dev"
 ```
 
 The spawner emits a single `workspace` container that exposes ports 8080

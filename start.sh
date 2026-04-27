@@ -32,7 +32,7 @@ fi
 # kubelet mounts at /var/run/secrets/kubernetes.io/serviceaccount/. The
 # resulting config has whatever powers the SA was granted — by default
 # very few; cluster-admin only when the spawner emitted the
-# ClusterRoleBinding (see workspace_cluster_admin_enabled).
+# ClusterRoleBinding (see sandbox_cluster_admin_enabled).
 SA_TOKEN_FILE=/var/run/secrets/kubernetes.io/serviceaccount/token
 SA_CA_FILE=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
 if [ -f "$SA_TOKEN_FILE" ] && [ -f "$SA_CA_FILE" ]; then
