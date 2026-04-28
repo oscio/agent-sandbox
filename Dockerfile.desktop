@@ -44,27 +44,13 @@ RUN apt-get update \
         # the user can pick; agents can drive them via Playwright (headed)
         # or xdotool. Image grows ~600MB.
         chromium firefox-esr \
-        # CJK rendering (fonts-noto-cjk covers Korean/Japanese/Chinese in
-        # one pack; fonts-nanum is the de-facto Korean default). Without
-        # these, Chrome/Firefox render Hangul as boxes.
-        fonts-noto-cjk fonts-noto-cjk-extra fonts-nanum \
-        # Korean input method — ibus is lighter than fcitx5 and works
-        # cleanly under XFCE. ibus-gtk{3,4} wires IM into the GTK
-        # input pipeline so Chromium/Firefox accept Hangul once the
-        # engine is enabled.
-        ibus ibus-hangul ibus-gtk3 ibus-gtk4 \
  && apt-get clean \
  && rm -rf /var/lib/apt/lists/* \
  && make-ssl-cert generate-default-snakeoil --force-overwrite \
  # /etc/ssl/private/ssl-cert-snakeoil.key is mode 640 root:ssl-cert.
  # KasmVNC runs as coder, so coder needs ssl-cert group membership to
  # read the key — otherwise kasmvncserver exits at boot.
- && usermod -aG ssl-cert coder \
- # Generate the ko_KR.UTF-8 locale so apps that switch on LANG (e.g.
- # ibus-hangul's date format) have it available. Default LANG stays
- # en_US.UTF-8 from the base image.
- && sed -i 's/# *\(ko_KR.UTF-8\)/\1/' /etc/locale.gen \
- && locale-gen ko_KR.UTF-8
+ && usermod -aG ssl-cert coder
 
 # KasmVNC: the official Debian .deb. Upstream publishes a `bookworm` build —
 # trixie shares glibc/libstdc++ ABI with bookworm so it installs cleanly.
@@ -84,7 +70,14 @@ RUN ARCH="$(dpkg --print-architecture)" \
 # tweak per-pod (changes survive across pod restarts via the hermes-home PVC
 # if we ever map it onto ~/.vnc — for now it's ephemeral).
 RUN install -d -m 0700 -o coder -g coder /home/coder/.vnc \
- && install -d -m 0755 -o coder -g coder /home/coder/.config/ibus \
+ && printf '%s\n' \
+        '#!/bin/sh' \
+        'xrdb $HOME/.Xresources 2>/dev/null || true' \
+        'export XDG_SESSION_DESKTOP=xfce' \
+        'export XDG_CURRENT_DESKTOP=XFCE' \
+        'exec dbus-launch --exit-with-session xfce4-session' \
+      > /home/coder/.vnc/xstartup \
+ && chmod 0755 /home/coder/.vnc/xstartup \
  # KasmVNC's select-de.sh prompts "[1] XFCE / [2] Manually edit xstartup"
  # on first boot and only skips the prompt when `~/.vnc/.de-was-selected`
  # exists. Touching it pre-build short-circuits the prompt so supervisord
@@ -107,14 +100,6 @@ RUN install -d -m 0700 -o coder -g coder /home/coder/.vnc \
  # the gateway (KasmVNC runs with SecurityTypes=None in supervisord), so
  # this password is never checked.
  && su -s /bin/sh coder -c 'printf "kasmvnc\nkasmvnc\n" | kasmvncpasswd -u kasm -w /home/coder/.kasmpasswd'
-
-# xstartup + ibus engine preload. xstartup runs ibus-daemon (with
-# GTK/Qt IM env exported) before xfce4-session so every desktop-
-# spawned app inherits the right XMODIFIERS. ibus-config.ini
-# pre-seeds the engine list so users don't have to ibus-setup.
-COPY --chown=coder:coder desktop/xstartup /home/coder/.vnc/xstartup
-COPY --chown=coder:coder desktop/ibus-config.ini /home/coder/.config/ibus/ibus-config.ini
-RUN chmod 0755 /home/coder/.vnc/xstartup
 
 # Replace supervisord.conf with the desktop-aware variant (adds kasmvnc +
 # xfce4 programs, keeps the existing code-server / agent / webui / ttyd).
