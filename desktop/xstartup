@@ -5,6 +5,11 @@
 # spawns (file manager, browsers, terminals), so Hangul typing
 # works without per-app config.
 xrdb $HOME/.Xresources 2>/dev/null || true
+# KasmVNC clears XDG_CONFIG_DIRS, then xfce4-session bails with
+# "unable to load a failsafe session. XDG_CONFIG_DIRS is set
+# incorrectly (must include /etc)". Restore the Debian default so
+# xfce4-session finds /etc/xdg/xdg-xfce/xfce4-session/* templates.
+export XDG_CONFIG_DIRS=/etc/xdg/xdg-xfce:/etc/xdg
 export XDG_SESSION_DESKTOP=xfce
 export XDG_CURRENT_DESKTOP=XFCE
 export GTK_IM_MODULE=ibus
