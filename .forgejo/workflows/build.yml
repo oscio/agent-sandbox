@@ -7,6 +7,14 @@ name: build-and-push
 # Desktop image FROM's the basic image, so the basic build must finish
 # first (Forgejo Actions `needs:` enforces ordering). Both push to the
 # in-cluster Harbor; tags are commit SHA + `latest`.
+#
+# How docker works inside the runner: the forgejo-runner pod ships a
+# privileged DinD sidecar exposed at tcp://host.docker.internal:2375;
+# DOCKER_HOST is propagated into job containers by the runner's
+# config.yaml. Job containers default to `node:20-bookworm` (no docker
+# CLI), so we install docker.io as the first step. DinD is started with
+# `--insecure-registry=cr.dev.openschema.io` (selfsigned dev mode), so
+# `docker push` works without trusting the platform CA.
 
 on:
   push:
@@ -24,44 +32,50 @@ jobs:
       image_ref: ${{ env.HARBOR }}/${{ env.PROJECT }}/agent-sandbox:${{ github.sha }}
     steps:
       - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
-        with:
-          driver: remote
-          endpoint: ${{ env.BUILDKIT_HOST }}
+      - name: Install docker CLI
+        run: |
+          apt-get update -qq
+          apt-get install -y --no-install-recommends docker.io ca-certificates
+      - name: Login to Harbor
+        env:
+          HU: ${{ secrets.HARBOR_USER }}
+          HT: ${{ secrets.HARBOR_TOKEN }}
+        run: |
+          echo "$HT" | docker login "$HARBOR" -u "$HU" --password-stdin
       - name: Build and push (basic)
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: Dockerfile
-          push: true
-          tags: |
-            ${{ env.HARBOR }}/${{ env.PROJECT }}/agent-sandbox:${{ github.sha }}
-            ${{ env.HARBOR }}/${{ env.PROJECT }}/agent-sandbox:latest
-          cache-from: type=local,src=/tmp/buildkit-cache-basic
-          cache-to: type=local,dest=/tmp/buildkit-cache-basic,mode=max
+        env:
+          IMAGE: ${{ env.HARBOR }}/${{ env.PROJECT }}/agent-sandbox
+          SHA: ${{ github.sha }}
+        run: |
+          set -eu
+          docker build -t "$IMAGE:$SHA" -t "$IMAGE:latest" -f Dockerfile .
+          docker push "$IMAGE:$SHA"
+          docker push "$IMAGE:latest"
 
   desktop:
     runs-on: docker
     needs: basic
     steps:
       - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
-        with:
-          driver: remote
-          endpoint: ${{ env.BUILDKIT_HOST }}
+      - name: Install docker CLI
+        run: |
+          apt-get update -qq
+          apt-get install -y --no-install-recommends docker.io ca-certificates
+      - name: Login to Harbor
+        env:
+          HU: ${{ secrets.HARBOR_USER }}
+          HT: ${{ secrets.HARBOR_TOKEN }}
+        run: |
+          echo "$HT" | docker login "$HARBOR" -u "$HU" --password-stdin
       - name: Build and push (desktop)
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: Dockerfile.desktop
-          push: true
-          # Desktop image bases off the basic image we just pushed —
-          # BuildKit's `--build-arg` passes the SHA-tagged ref so we
-          # never accidentally compose against a stale `latest`.
-          build-args: |
-            SANDBOX_BASE=${{ needs.basic.outputs.image_ref }}
-          tags: |
-            ${{ env.HARBOR }}/${{ env.PROJECT }}/agent-sandbox-desktop:${{ github.sha }}
-            ${{ env.HARBOR }}/${{ env.PROJECT }}/agent-sandbox-desktop:latest
-          cache-from: type=local,src=/tmp/buildkit-cache-desktop
-          cache-to: type=local,dest=/tmp/buildkit-cache-desktop,mode=max
+        env:
+          BASE_IMAGE: ${{ needs.basic.outputs.image_ref }}
+          IMAGE: ${{ env.HARBOR }}/${{ env.PROJECT }}/agent-sandbox-desktop
+          SHA: ${{ github.sha }}
+        run: |
+          set -eu
+          docker build --build-arg "SANDBOX_BASE=$BASE_IMAGE" \
+                       -t "$IMAGE:$SHA" -t "$IMAGE:latest" \
+                       -f Dockerfile.desktop .
+          docker push "$IMAGE:$SHA"
+          docker push "$IMAGE:latest"
