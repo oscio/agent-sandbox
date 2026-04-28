@@ -44,6 +44,10 @@ RUN apt-get update \
         # the user can pick; agents can drive them via Playwright (headed)
         # or xdotool. Image grows ~600MB.
         chromium firefox-esr \
+        # CJK rendering. Without these Chrome shows Korean as boxes.
+        # Rendering only — no IME (ibus broke xfce4-session every way I
+        # wired it; users can paste Korean or use a host-side IME).
+        fonts-noto-cjk fonts-nanum \
  && apt-get clean \
  && rm -rf /var/lib/apt/lists/* \
  && make-ssl-cert generate-default-snakeoil --force-overwrite \
