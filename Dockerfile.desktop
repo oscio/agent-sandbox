@@ -84,33 +84,7 @@ RUN ARCH="$(dpkg --print-architecture)" \
 # tweak per-pod (changes survive across pod restarts via the hermes-home PVC
 # if we ever map it onto ~/.vnc — for now it's ephemeral).
 RUN install -d -m 0700 -o coder -g coder /home/coder/.vnc \
- && printf '%s\n' \
-        '#!/bin/sh' \
-        'xrdb $HOME/.Xresources 2>/dev/null || true' \
-        'export XDG_SESSION_DESKTOP=xfce' \
-        'export XDG_CURRENT_DESKTOP=XFCE' \
-        '# Korean input. ibus-daemon picks up the engine list pre-seeded' \
-        '# in ~/.config/ibus/preload-engines below. Toggle Hangul/English' \
-        '# with the Hangul key (or Shift+Space if no Korean keyboard).' \
-        'export GTK_IM_MODULE=ibus' \
-        'export QT_IM_MODULE=ibus' \
-        'export XMODIFIERS=@im=ibus' \
-        'ibus-daemon -drxR &' \
-        'exec dbus-launch --exit-with-session xfce4-session' \
-      > /home/coder/.vnc/xstartup \
- && chmod 0755 /home/coder/.vnc/xstartup \
- # Pre-seed ibus engine list (xkb:us::eng + hangul). Without this the
- # user has to open ibus-setup once after every fresh container start
- # to enable the Hangul engine. dconf is XFCE's settings store —
- # writing it as part of build leaves the new VM ready out of the box.
  && install -d -m 0755 -o coder -g coder /home/coder/.config/ibus \
- && printf '%s\n' \
-        '[general]' \
-        'preload-engines=[\x27xkb:us::eng\x27, \x27hangul\x27]' \
-        'use-system-keyboard-layout=true' \
-        'use-global-engine=true' \
-      > /home/coder/.config/ibus/ibus-config.ini \
- && chown coder:coder /home/coder/.config/ibus/ibus-config.ini \
  # KasmVNC's select-de.sh prompts "[1] XFCE / [2] Manually edit xstartup"
  # on first boot and only skips the prompt when `~/.vnc/.de-was-selected`
  # exists. Touching it pre-build short-circuits the prompt so supervisord
@@ -133,6 +107,14 @@ RUN install -d -m 0700 -o coder -g coder /home/coder/.vnc \
  # the gateway (KasmVNC runs with SecurityTypes=None in supervisord), so
  # this password is never checked.
  && su -s /bin/sh coder -c 'printf "kasmvnc\nkasmvnc\n" | kasmvncpasswd -u kasm -w /home/coder/.kasmpasswd'
+
+# xstartup + ibus engine preload. xstartup runs ibus-daemon (with
+# GTK/Qt IM env exported) before xfce4-session so every desktop-
+# spawned app inherits the right XMODIFIERS. ibus-config.ini
+# pre-seeds the engine list so users don't have to ibus-setup.
+COPY --chown=coder:coder desktop/xstartup /home/coder/.vnc/xstartup
+COPY --chown=coder:coder desktop/ibus-config.ini /home/coder/.config/ibus/ibus-config.ini
+RUN chmod 0755 /home/coder/.vnc/xstartup
 
 # Replace supervisord.conf with the desktop-aware variant (adds kasmvnc +
 # xfce4 programs, keeps the existing code-server / agent / webui / ttyd).
