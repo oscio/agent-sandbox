@@ -47,12 +47,12 @@ RUN apt-get update \
         # CJK rendering (fonts-noto-cjk covers Korean/Japanese/Chinese in
         # one pack; fonts-nanum is the de-facto Korean default). Without
         # these, Chrome/Firefox render Hangul as boxes.
-        fonts-noto-cjk fonts-noto-cjk-extra fonts-nanum fonts-nanum-coding \
+        fonts-noto-cjk fonts-noto-cjk-extra fonts-nanum \
         # Korean input method — ibus is lighter than fcitx5 and works
-        # cleanly under XFCE. ibus-gtk* / ibus-qt5 wire IM into the
-        # GTK and Qt input pipelines so Chromium/Firefox/Qt apps all
-        # accept Hangul once the engine is enabled.
-        ibus ibus-hangul ibus-gtk ibus-gtk3 ibus-gtk4 \
+        # cleanly under XFCE. ibus-gtk{3,4} wires IM into the GTK
+        # input pipeline so Chromium/Firefox accept Hangul once the
+        # engine is enabled.
+        ibus ibus-hangul ibus-gtk3 ibus-gtk4 \
  && apt-get clean \
  && rm -rf /var/lib/apt/lists/* \
  && make-ssl-cert generate-default-snakeoil --force-overwrite \
