@@ -11,18 +11,17 @@
 set -e
 
 WORKSPACE_DIR="${WORKSPACE_DIR:-/home/coder/workspace}"
-HERMES_HOME="${HERMES_HOME:-/home/coder/.hermes}"
 
-mkdir -p "$WORKSPACE_DIR" "$HERMES_HOME"
-chown -R coder:coder "$WORKSPACE_DIR" "$HERMES_HOME" 2>/dev/null || true
+mkdir -p "$WORKSPACE_DIR"
+chown -R coder:coder "$WORKSPACE_DIR" 2>/dev/null || true
 
-# Platform CA — the spawner mounts the cluster's self-signed-CA ConfigMap at
-# /etc/hermes/ca/. Installing it into /usr/local/share/ca-certificates/ +
-# `update-ca-certificates` rebuilds /etc/ssl/certs/ca-certificates.crt so
+# Platform CA — when the spawner mounts the cluster's self-signed-CA
+# ConfigMap at /etc/platform-ca/, install it into
+# /usr/local/share/ca-certificates/ + `update-ca-certificates` so
 # git/curl/python (and pretty much everything else that uses the system
 # trust store) trust internal HTTPS hosts (Forgejo, Harbor, …) automatically.
-if [ -f /etc/hermes/ca/ca.crt ]; then
-    install -m 0644 /etc/hermes/ca/ca.crt /usr/local/share/ca-certificates/hermes-platform.crt
+if [ -f /etc/platform-ca/ca.crt ]; then
+    install -m 0644 /etc/platform-ca/ca.crt /usr/local/share/ca-certificates/platform-ca.crt
     update-ca-certificates 2>/dev/null || true
 fi
 
@@ -54,9 +53,9 @@ contexts:
   context:
     cluster: in-cluster
     namespace: ${SA_NS}
-    user: hermes
+    user: coder
 users:
-- name: hermes
+- name: coder
   user:
     token: ${SA_TOKEN}
 EOF
@@ -65,8 +64,8 @@ EOF
 fi
 
 # Git credentials — when the spawner provisioned a Forgejo PAT for this
-# project, GIT_HOST/GIT_USERNAME/GIT_TOKEN come in as env vars from the
-# `hermes-git-creds` Secret. Translate them into ~/.git-credentials +
+# project, GIT_HOST/GIT_USERNAME/GIT_TOKEN come in as env vars from a
+# git-creds Secret. Translate them into ~/.git-credentials +
 # `git config --global` so plain `git push` Just Works for the coder user.
 # Skipped silently when env is unset (no Forgejo automation = manual setup).
 if [ -n "${GIT_TOKEN:-}" ] && [ -n "${GIT_HOST:-}" ] && [ -n "${GIT_USERNAME:-}" ]; then

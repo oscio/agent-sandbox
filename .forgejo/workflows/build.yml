@@ -1,7 +1,7 @@
 name: build-and-push
 
 # Forgejo Actions workflow — builds BOTH workspace variants on push:
-#   - agent-sandbox          : basic (code-server + hermes-agent + webui + ttyd)
+#   - agent-sandbox          : basic (code-server + ttyd)
 #   - agent-sandbox-desktop  : basic + XFCE + KasmVNC + xdotool/scrot
 #
 # Desktop image FROM's the basic image, so the basic build must finish

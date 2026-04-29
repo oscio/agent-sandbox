@@ -1,32 +1,21 @@
 # syntax=docker/dockerfile:1.7
 # ---------------------------------------------------------------------------
-# agent-sandbox — single-container "Linux pod" for a Hermes project.
+# agent-sandbox — single-container "Linux pod" workspace image.
 #
 # Combines into one image:
 #   * code-server (browser VSCode + xterm.js terminal) — operator interface
-#   * hermes-agent (gateway on :8642)                  — agent runtime
-#   * hermes-webui (UI on :8787)                       — agent web UI
+#   * ttyd        (standalone xterm.js shell on :7681) — raw terminal URL
 #
-# All three processes are managed by supervisord and run as the `coder`
-# user (UID 1000), which has passwordless sudo. The agentic workspace lives
-# at ~/workspace (= /home/coder/workspace) and is shared across the whole
-# environment — the user operates files in code-server's tree + integrated
-# terminal, hermes-agent runs against the same files.
+# Both processes are managed by supervisord and run as the `coder`
+# user (UID 1000), which has passwordless sudo. The workspace lives at
+# ~/workspace (= /home/coder/workspace) — code-server's file tree and
+# integrated terminal both operate against the same directory.
 #
 # Docker daemon comes from a separate `docker-dind` sidecar in the same pod;
 # this image only ships the docker CLI (DOCKER_HOST=tcp://localhost:2375).
-#
-# Base MUST be Debian trixie because the upstream hermes-agent image ships a
-# venv built against trixie's python3.13 (`/usr/bin/python3`). Building on
-# bookworm breaks the venv's .so loads.
 # ---------------------------------------------------------------------------
 
-ARG HERMES_AGENT_IMAGE=nousresearch/hermes-agent:latest
-ARG HERMES_WEBUI_IMAGE=ghcr.io/nesquena/hermes-webui:latest
 ARG CODE_SERVER_VERSION=4.96.4
-
-FROM ${HERMES_AGENT_IMAGE} AS agent-src
-FROM ${HERMES_WEBUI_IMAGE} AS webui-src
 
 FROM debian:trixie-slim
 
@@ -64,11 +53,11 @@ RUN ARCH="$(dpkg --print-architecture)" \
  && chmod +x /usr/local/bin/ttyd \
  && ttyd --version
 
-# Terraform + kubectl. Workspace pods bind to cluster-admin (opt-in via the
-# spawner's `sandbox_cluster_admin_enabled` flag) so the agent or user
-# can run `terraform apply` directly against this same cluster — useful for
-# solo dev where the workspace IS the operator console. State backend
-# choice (kubernetes-secret / postgres / S3 / local) is left to the user's
+# Terraform + kubectl. Workspace pods can bind to cluster-admin (opt-in via
+# the platform's `sandbox_cluster_admin_enabled` flag) so the user can run
+# `terraform apply` directly against this same cluster — useful for solo dev
+# where the workspace IS the operator console. State backend choice
+# (kubernetes-secret / postgres / S3 / local) is left to the user's
 # terraform code; the pod just provides the binaries + creds.
 ARG TF_VERSION=1.10.4
 ARG KUBECTL_VERSION=v1.31.4
@@ -119,45 +108,14 @@ RUN ARCH="$(dpkg --print-architecture)" \
  && rm /tmp/code-server.tar.gz \
  && ln -s /usr/local/lib/code-server/bin/code-server /usr/local/bin/code-server
 
-# Agent: source + venv. The venv's python symlinks resolve to /usr/bin/python3
-# (trixie's 3.13), which we have in this base — venv runs as-is.
-COPY --from=agent-src /opt/hermes /opt/hermes
-RUN chown -R coder:coder /opt/hermes
-
-# Custom skills baked on top of the upstream bundle. Each subdir under
-# `skills/` is a category (github, devops, ...); inside it each
-# `<skill>/SKILL.md` is a manifest. The agent's skills_sync.py runs at
-# pod first boot and copies these into ~/.hermes/skills/ exactly like
-# the upstream-bundled ones.
-COPY skills/ /opt/hermes/skills/
-RUN chown -R coder:coder /opt/hermes/skills
-
-# GitHub Spec Kit CLI — `specify init <project>` bootstraps a directory
-# with templates + slash-command stubs the agent recognizes (/specify,
-# /plan, /tasks, /implement). See skills/github/spec-kit/SKILL.md for
-# the workflow. `--break-system-packages` is required on trixie because
-# /usr/bin/python3 is marked externally-managed.
-RUN python3 -m pip install --break-system-packages --no-cache-dir \
-        git+https://github.com/github/spec-kit.git \
- && specify --version 2>&1 | head -1
-
-# WebUI: re-rooted from upstream's /apptoo to /opt/hermes-webui so paths are
-# self-explanatory and parallel /opt/hermes (the agent). The webui runs against
-# the agent's venv (see supervisord.conf hermes-webui.command) — that venv
-# already has pyyaml + everything else webui needs, no separate install.
-COPY --from=webui-src /apptoo /opt/hermes-webui
-RUN chown -R coder:coder /opt/hermes-webui
-
 COPY supervisord.conf /etc/supervisord.conf
 COPY start.sh /usr/local/bin/agent-sandbox-start
-COPY agent-bootstrap.sh /usr/local/bin/hermes-agent-bootstrap
-RUN chmod +x /usr/local/bin/agent-sandbox-start /usr/local/bin/hermes-agent-bootstrap
+RUN chmod +x /usr/local/bin/agent-sandbox-start
 
 ENV DOCKER_HOST=tcp://localhost:2375
-ENV HERMES_HOME=/home/coder/.hermes
 ENV WORKSPACE_DIR=/home/coder/workspace
 
-EXPOSE 7681 8080 8642 8787
+EXPOSE 7681 8080
 
 WORKDIR /home/coder
 ENTRYPOINT ["/usr/bin/tini", "-g", "--", "/usr/local/bin/agent-sandbox-start"]

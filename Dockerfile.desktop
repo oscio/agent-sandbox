@@ -71,8 +71,9 @@ RUN ARCH="$(dpkg --print-architecture)" \
 
 # KasmVNC config: open access (auth handled by oauth2-proxy at the gateway),
 # WebSocket on 6901, X display :1. Lives in coder's home so the user can
-# tweak per-pod (changes survive across pod restarts via the hermes-home PVC
-# if we ever map it onto ~/.vnc — for now it's ephemeral).
+# tweak per-pod (changes survive across pod restarts when the workspace PVC
+# is mapped onto a parent path that includes ~/.vnc — for now it's
+# ephemeral).
 RUN install -d -m 0700 -o coder -g coder /home/coder/.vnc \
  && printf '%s\n' \
         '#!/bin/sh' \
@@ -106,7 +107,7 @@ RUN install -d -m 0700 -o coder -g coder /home/coder/.vnc \
  && su -s /bin/sh coder -c 'printf "kasmvnc\nkasmvnc\n" | kasmvncpasswd -u kasm -w /home/coder/.kasmpasswd'
 
 # Replace supervisord.conf with the desktop-aware variant (adds kasmvnc +
-# xfce4 programs, keeps the existing code-server / agent / webui / ttyd).
+# xfce4 programs, keeps the existing code-server / ttyd).
 COPY supervisord-desktop.conf /etc/supervisord.conf
 
 EXPOSE 6901
