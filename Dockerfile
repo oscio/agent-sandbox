@@ -26,7 +26,7 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends \
         sudo ca-certificates gnupg lsb-release locales tini supervisor \
         vim nano less man-db tmux zsh bash-completion \
-        git git-lfs openssh-client curl wget rsync \
+        git git-lfs openssh-client openssh-server curl wget rsync \
         ripgrep fd-find jq tree \
         unzip zip tar \
         build-essential pkg-config libssl-dev \
@@ -112,10 +112,24 @@ COPY supervisord.conf /etc/supervisord.conf
 COPY start.sh /usr/local/bin/agent-sandbox-start
 RUN chmod +x /usr/local/bin/agent-sandbox-start
 
+# sshd config for sidecar SSH shim. Listens on :22 (pod-internal),
+# only key auth, no password. authorized_keys is mounted in by the
+# spawner from /etc/agent-ssh/authorized_keys (Secret); start.sh
+# stages it into /home/coder/.ssh/authorized_keys with right perms.
+RUN mkdir -p /run/sshd /etc/ssh \
+ && sed -i \
+        -e 's/^#\?\(PermitRootLogin\) .*/\1 no/' \
+        -e 's/^#\?\(PasswordAuthentication\) .*/\1 no/' \
+        -e 's/^#\?\(PubkeyAuthentication\) .*/\1 yes/' \
+        -e 's/^#\?\(KbdInteractiveAuthentication\) .*/\1 no/' \
+        -e 's/^#\?\(ChallengeResponseAuthentication\) .*/\1 no/' \
+        -e 's/^#\?\(UsePAM\) .*/\1 no/' \
+        /etc/ssh/sshd_config
+
 ENV DOCKER_HOST=tcp://localhost:2375
 ENV WORKSPACE_DIR=/home/coder/workspace
 
-EXPOSE 7681 8080
+EXPOSE 22 7681 8080
 
 WORKDIR /home/coder
 ENTRYPOINT ["/usr/bin/tini", "-g", "--", "/usr/local/bin/agent-sandbox-start"]

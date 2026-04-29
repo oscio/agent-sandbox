@@ -15,6 +15,18 @@ WORKSPACE_DIR="${WORKSPACE_DIR:-/home/coder/workspace}"
 mkdir -p "$WORKSPACE_DIR"
 chown -R coder:coder "$WORKSPACE_DIR" 2>/dev/null || true
 
+# sidecar SSH shim auth — when the spawner mounts an agent's public
+# key at /etc/agent-ssh/authorized_keys, install it as coder's
+# authorized_keys so the sidecar can ssh in over localhost. Skipped
+# silently when the mount isn't present (= VM mode without agent).
+if [ -f /etc/agent-ssh/authorized_keys ]; then
+    install -d -m 0700 -o coder -g coder /home/coder/.ssh
+    install -m 0600 -o coder -g coder /etc/agent-ssh/authorized_keys \
+        /home/coder/.ssh/authorized_keys
+fi
+# sshd needs host keys; first boot generates them under /etc/ssh.
+ssh-keygen -A 2>/dev/null || true
+
 # Platform CA — when the spawner mounts the cluster's self-signed-CA
 # ConfigMap at /etc/platform-ca/, install it into
 # /usr/local/share/ca-certificates/ + `update-ca-certificates` so
