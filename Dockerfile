@@ -130,9 +130,11 @@ RUN mkdir -p /run/sshd /etc/ssh \
         -e 's/^#\?\(KbdInteractiveAuthentication\) .*/\1 no/' \
         -e 's/^#\?\(ChallengeResponseAuthentication\) .*/\1 no/' \
         -e 's/^#\?\(UsePAM\) .*/\1 no/' \
-        /etc/ssh/sshd_config
+        /etc/ssh/sshd_config \
+ && printf '\n# Force DOCKER_HOST on every ssh session. The dind sidecar listens\n# on tcp://127.0.0.1:2375 (containers in a pod share the netns) but\n# `bash -c` invocations through ssh start with a clean env, so the\n# Dockerfile-level ENV does not propagate. SetEnv injects it into\n# every accepted session unconditionally.\nSetEnv DOCKER_HOST=tcp://127.0.0.1:2375\n' \
+        >> /etc/ssh/sshd_config
 
-ENV DOCKER_HOST=tcp://localhost:2375
+ENV DOCKER_HOST=tcp://127.0.0.1:2375
 ENV WORKSPACE_DIR=/home/coder/workspace
 
 EXPOSE 22 7681 8080
