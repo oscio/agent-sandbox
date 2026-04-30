@@ -32,6 +32,7 @@ RUN apt-get update \
         build-essential pkg-config libssl-dev \
         python3 python3-pip python3-venv python3-dev \
         nodejs npm \
+        iproute2 lsof procps net-tools dnsutils iputils-ping htop strace \
  && apt-get clean \
  && rm -rf /var/lib/apt/lists/* \
  && ln -sf /usr/bin/fdfind /usr/local/bin/fd
