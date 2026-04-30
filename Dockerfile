@@ -88,8 +88,14 @@ RUN sed -i 's/# *\(en_US.UTF-8\)/\1/' /etc/locale.gen \
 ENV LANG=en_US.UTF-8 LANGUAGE=en_US:en LC_ALL=en_US.UTF-8
 
 # Single login user. UID 1000 is what fsGroup pins on the workspace PVC.
+# `usermod -p '*'` unlocks the account so ssh key auth works — the
+# default `useradd` puts `!` in /etc/shadow which sshd treats as
+# "account locked" and refuses even valid pubkey auth ("User coder
+# not allowed because account is locked"). `*` means "no password
+# set" but the account is not locked, so key auth still goes through.
 RUN groupadd --gid 1000 coder \
  && useradd --uid 1000 --gid 1000 --shell /bin/bash --create-home coder \
+ && usermod -p '*' coder \
  && echo 'coder ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/90-coder \
  && chmod 0440 /etc/sudoers.d/90-coder
 
